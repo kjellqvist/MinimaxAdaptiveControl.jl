@@ -1,6 +1,6 @@
 using LinearAlgebra
 using JuMP
-using CSDP
+using Hypatia
 using MinimaxAdaptiveControl
 using Test
 ##
@@ -38,19 +38,20 @@ end
     B1[:] = [0; 0; 1.0]
     B2 = -B1
     Q = I(3)
-    γ = 19
+    γ = 20
     R = I(1)
     As = [A, A]
     Bs = [B1, B2]
 
     mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ, [0.; 0; 0])
-    model = Model(CSDP.Optimizer)
-    Tval, stat = MinimaxAdaptiveControl.Tsyn(mac, model)
+    model = Model(Hypatia.Optimizer)
+    unset_silent(model) # For now broken...
+    Tval, stat = MinimaxAdaptiveControl.Tsyn(mac, model);
 
     P = mac.candidates[1].P
     B = B1
     K = mac.candidates[1].K
-    Tval = Tval + 1e-4*I(3) # Might be needed
+    #Tval = Tval + 1e-4*I(3) # Might be needed
     ineq13 = P - (Q + K'*R*K + ((A-B*K)'/(inv(P) -γ^(-2)*I(3)))*(A-B*K))
     ineq14 = Tval - (Q + K'*R*K + ((A+B*K)'/(inv(P) -γ^(-2)*I(3)))*(A+B*K))
     ineq15 = Tval - (Q + K'*(R - γ^2*B'*B)*K + (A'/(inv(Tval) - γ^(-2)*I(3))*A))
@@ -73,12 +74,12 @@ end
     K2 = mac.candidates[2].K
     P2 = mac.candidates[2].P
 
-    model = Model(CSDP.Optimizer)
+    model = Model(Hypatia.Optimizer)
     @variable(model, T[1:1,1:1] in PSDCone())
 
     X12_ref = [(T - Q - K2'*R*K2) (A1 - B1*K2)
             (A1 - B1*K2)' inv(P1)-I(1)/γ^2]
-    @test X12_ref == MinimaxAdaptiveControl.X(mac, T, 1,2)
+    @test X12_ref == MinimaxAdaptiveControl.X(mac, T, 1,2, 0)
 
     A11 = A1 - B1*K1
     A21 = A2 - B2*K1
@@ -89,5 +90,5 @@ end
     Z121_ref = [Z121_ref11 Z121_ref12
                 Z121_ref21 Z121_ref22]
     
-    @test Z121_ref == MinimaxAdaptiveControl.Z(mac, T, 1,2,1)
+    @test Z121_ref == MinimaxAdaptiveControl.Z(mac, T, 1,2,1,0)
 end

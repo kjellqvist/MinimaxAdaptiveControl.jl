@@ -138,7 +138,7 @@ end
 T >= Q + K_j'RK_j + (A_i-B_iK_j)(P^(-1) - 1/gamma^2*I)^(-1)*(A_i-B_iK_j) and
 T >= Q + K_k'RK_k ...
 """
-function Tsyn(mac::MAController{M}, model::JuMP.Model) where M<:Number
+function Tsyn(mac::MAController{M}, model::JuMP.Model, tol::Real = 0.01) where M<:Number
     N_systems = length(mac.candidates)
     n = size(mac.Q)[1]
     @variable(model, T[1:n, 1:n] in PSDCone())
@@ -147,16 +147,16 @@ function Tsyn(mac::MAController{M}, model::JuMP.Model) where M<:Number
     for i = 1:N_systems
         @constraint(model, Symmetric(T - mac.candidates[i].P) in PSDCone())
         for j = 1:N_systems
-            @constraint(model, X(mac, T, i,j) in PSDCone())
+            @constraint(model, X(mac, T, i,j, tol) in PSDCone())
             if i!=j
                 for k = 1:N_systems
-                    @constraint(model, Z(mac, T, i,j,k) in PSDCone())
+                    @constraint(model, Z(mac, T, i,j,k, tol) in PSDCone())
                 end
             end
         end
     end
 
-    @constraint(model, Symmetric(t*I(n) - T) in PSDCone())
+    @constraint(model, [t; vec(T)] in SecondOrderCone())
     @objective(model, Min, t)
     optimize!(model)
     T = value.(T)
@@ -174,7 +174,7 @@ X is positive semidefinite.
 """
 function X(mac::MAController{P},
     T::AbstractMatrix, 
-    i::Integer, k::Integer) where P<:Number
+    i::Integer, k::Integer, tol::Real = 0.01) where P<:Number
     Q = mac.Q
     R = mac.R
     Kk = mac.candidates[k].K
@@ -184,7 +184,7 @@ function X(mac::MAController{P},
 
     Aik = Ai - Bi*Kk
 
-    Xik = [(T - Q - Kk'*R*Kk) Aik'
+    Xik = [(T - Q - Kk'*R*Kk)-tol*I(size(Pi)[1]) Aik'
             Aik (inv(Pi) - mac.γ^(-2)*I(size(Pi)[1]))]
     return Xik
 end
@@ -199,7 +199,7 @@ Z is positive semidefinite.
 """
 function Z(mac::MAController{P},
     T::AbstractMatrix, 
-    i::Integer, j::Integer, k::Integer) where P<:Number
+    i::Integer, j::Integer, k::Integer, tol::Real = 0.01) where P<:Number
 
     Q = mac.Q
     R = mac.R
@@ -216,7 +216,7 @@ function Z(mac::MAController{P},
     Aik = Ai - Bi*Kk
     Ajk = Aj - Bj*Kk
 
-    Zijk11 = T - Q - Kk'*R*Kk + γ^2/2*(Aik'*Aik + Ajk'*Ajk)
+    Zijk11 = T - Q - Kk'*R*Kk + γ^2/2*(Aik'*Aik + Ajk'*Ajk) -tol*I(size(Pi)[1])
     Zijk21 = (Aik + Ajk)
     Zijk22 = 4/γ^4*(γ^2*I(size(Pi)[1]) - T)
     Zijk = [Zijk11 Zijk21'
