@@ -1,6 +1,6 @@
 using LinearAlgebra
 using JuMP
-using Mosek, MosekTools
+using CSDP
 using MinimaxAdaptiveControl
 using Test
 ##
@@ -44,7 +44,7 @@ end
     Bs = [B1, B2]
 
     mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ, [0.; 0; 0])
-    model = Model(Mosek.Optimizer)
+    model = Model(CSDP.Optimizer)
     Tval, stat = MinimaxAdaptiveControl.Tsyn(mac, model)
 
     P = mac.candidates[1].P
@@ -73,7 +73,7 @@ end
     K2 = mac.candidates[2].K
     P2 = mac.candidates[2].P
 
-    model = Model(Mosek.Optimizer)
+    model = Model(CSDP.Optimizer)
     @variable(model, T[1:1,1:1] in PSDCone())
 
     X12_ref = [(T - Q - K2'*R*K2) (A1 - B1*K2)
