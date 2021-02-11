@@ -1,4 +1,4 @@
 # MinimaxAdaptiveControl
 
-[![Build Status](https://travis-ci.com/kjellqvist/MinimaxAdaptiveControl.jl.svg?branch=master)](https://travis-ci.com/kjellqvist/MinimaxAdaptiveControl.jl)
-[![Coverage](https://codecov.io/gh/kjellqvist/MinimaxAdaptiveControl.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kjellqvist/MinimaxAdaptiveControl.jl)
+[![Unit Tests](https://github.com/kjellqvist/MinimaxAdaptiveControl.jl/workflows/CI/badge.svg)](https://github.com/kjellqvist/MinimaxAdaptiveControl.jl/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/kjellqvist/MinimaxAdaptiveControl.jl/branch/main/graph/badge.svg?token=C0M1GL5BOQ)](https://codecov.io/gh/kjellqvist/MinimaxAdaptiveControl.jl)
