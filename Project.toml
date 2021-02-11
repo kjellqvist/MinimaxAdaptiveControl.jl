@@ -3,8 +3,14 @@ uuid = "37d42955-b8b5-4e62-bbb2-568d4dbccabe"
 authors = ["Olle Kjellqvist <olle.kjellqvist@control.lth.se> and contributors"]
 version = "0.1.0"
 
+[deps]
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mosek = "6405355b-0ac2-5fba-af84-adbd65488c0e"
+MosekTools = "1ec41992-ff65-5c91-ac43-2df89e9693a4"
+
 [compat]
-julia = "1"
+julia = "1.5"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
