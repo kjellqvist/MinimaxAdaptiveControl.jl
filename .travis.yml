@@ -4,11 +4,11 @@ notifications:
   email: false
 julia:
   - 1.5
-  - nightly
 os:
   - linux
 arch:
   - x64
+codecov: true
 cache:
   directories:
     - ~/.julia/artifacts
