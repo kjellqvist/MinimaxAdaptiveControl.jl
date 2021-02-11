@@ -1,10 +1,7 @@
 using LinearAlgebra
 using JuMP
 using Mosek, MosekTools
-include("src/MinimaxAdaptiveControl.jl")
-include("src/mat_comp.jl")
-
-import .MinimaxAdaptiveControl
+using MinimaxAdaptiveControl
 using Test
 ##
 @testset "Recreate Anders' results" begin
@@ -66,7 +63,8 @@ end
 
 @testset "Testing X and Z" begin
     #Simple. one-dim
-    A1, A2, B1, B2, Q, R, gam2 = [fill(i*1.,1,1) for i in [1,2,3,5,7,11,13]]
+    A1, A2, B1, B2, Q, R = [fill(i*1.,1,1) for i in [1,2,3,5,7,11]]
+    γ = 13
     As = [A1, A2]
     Bs = [B1, B2]
     mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ, [0.; 0; 0])
@@ -92,7 +90,4 @@ end
                 Z121_ref21 Z121_ref22]
     
     @test Z121_ref == MinimaxAdaptiveControl.Z(mac, T, 1,2,1)
-
 end
-end
-##
