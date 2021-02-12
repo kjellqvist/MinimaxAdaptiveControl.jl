@@ -6,6 +6,8 @@
 ## Julia package for Minimax adaptive control of a finite set of linear systems
 Synthesize controllers and lyapunov functions from https://arxiv.org/abs/2011.10814
 
+## Docs
+https://kjellqvist.github.io/MinimaxAdaptiveControl.jl/dev/
 ## Installing
 ```
 ] add https://github.com/kjellqvist/MinimaxAdaptiveControl.jl
