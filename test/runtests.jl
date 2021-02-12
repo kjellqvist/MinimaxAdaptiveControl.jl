@@ -43,10 +43,10 @@ end
     As = [A, A]
     Bs = [B1, B2]
 
-    mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ, [0.; 0; 0])
+    mac = MAController(As, Bs, Q, R, γ, [0.; 0; 0])
     model = Model(Hypatia.Optimizer)
     unset_silent(model) # For now broken...
-    Tval, stat = MinimaxAdaptiveControl.Tsyn(mac, model);
+    Tval, stat = Tsyn(mac, model);
 
     P = mac.candidates[1].P
     B = B1
@@ -59,7 +59,6 @@ end
     @test minimum(eigvals(ineq13)) > 0
     @test minimum(eigvals(ineq14)) > 0
     @test minimum(eigvals(ineq15)) > 0
-    X = MinimaxAdaptiveControl.X(mac,Tval,1,2)
 end
 
 @testset "Testing X and Z" begin

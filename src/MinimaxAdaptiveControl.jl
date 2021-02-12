@@ -52,15 +52,22 @@ end
 
 # Constructors
 """
-    mac = MAController(
-        As::AbstractVector{<:AbstractMatrix{T}}, Bs::AbstractVector{<:AbstractMatrix{T}},
-        Q::AbstractMatrix, R::AbstractMatrix, γ::Real, 
-        x0::AbstractVector{<:Number}, lam=1) where T<:Number
+    mac = MAController(As, Bs, Q, R, γ, x0, lam)
 
 Create a MAController (minimax adaptive controller) `mac::MAController{T}`
-with matrices containing elements of type T.
+with matrices containing elements of type T, solving
+\\min\\_u\\max\\_w,i\\sum (|x_t|^2\\_Q + |u_t|^2\\_R) - \\gamma^2 \\sum |w_t|^2
+...
+# Arguments
+- `As::AbstractVector{<:AbstractMatrix{T}}` A vector of state matrices
+- `Bs::AbstractVector{<:AbstractMatrix{T}}` A vector of input gains
+- `Q::AbstractMatrix,`                      State penalty matrix |x|_Q^2
+- `R::AbstractMatrix,`                      Control penalty matrix |u|_R^2
+- `γ::Real,`                                Disturbance penalty, \\H_\\infty gain
+- `x0::AbstractVector{<:Number}`            Initial state
+- `lam::Real=1`                             Forgetting factor
+...
 """
-
 function MAController(
     As::AbstractVector{<:AbstractMatrix{T}}, Bs::AbstractVector{<:AbstractMatrix{T}},
     Q::AbstractMatrix, R::AbstractMatrix, γ::Real, 
@@ -96,11 +103,16 @@ end
 
 # Controls
 """
-    update!(mac::MAController, 
-        x::AbstractArray{T,1}, u::AbstractArray{T,1}) where T<:Number
+    update!(mac,x, u) 
     
 Update the internal states of the controller based 
 on current state `x` and control signal `u`.
+...
+# Arguments:
+- `mac::MAController`       MinimaxAdaptiveControl controller object
+- `x::AbstractArray{T,1}`   The current state
+- `u::Abstractarray{T,1}`   The previous control signal
+...
 
 """
 function update!(mac::MAController, 
@@ -124,19 +136,22 @@ end
     K(mac::MAController)
 
 Returns the feedback gain such that u = -Kx
+
 """
 function K(mac::MAController)
     return mac.candidates[mac.argmin[]].K
 end
 
-# TO DO: I'm uncertain about this one.
 """
-    T(mac::MAController) synthesizes a common T using convex
-    programming such that
-
-# TO IMPLEMENT!
-T >= Q + K_j'RK_j + (A_i-B_iK_j)(P^(-1) - 1/gamma^2*I)^(-1)*(A_i-B_iK_j) and
-T >= Q + K_k'RK_k ...
+    T(mac, model, tol = 0.01) 
+    synthesize a common T using convex programming such that
+    inequalities (19) and (20) are fulfilled.
+...
+# Arguments:
+- `mac::MAController` MinimaxAdaptiveControl controller object
+- `model::JuMP.Model` A user supplied JuMP model. Currently the solvers Mosek and Hypatia works.
+- `tol::Real = 0.01`  Forcing (19) and (20) to hold with margin, i.e. T - tol*I >= ...
+...
 """
 function Tsyn(mac::MAController{M}, model::JuMP.Model, tol::Real = 0.01) where M<:Number
     N_systems = length(mac.candidates)
@@ -156,7 +171,7 @@ function Tsyn(mac::MAController{M}, model::JuMP.Model, tol::Real = 0.01) where M
         end
     end
 
-    @constraint(model, [t; vec(T)] in SecondOrderCone())
+    @constraint(model, Symmetric(t*I(n) - T) in PSDCone()) # Regularize the operator norm of T
     @objective(model, Min, t)
     optimize!(model)
     T = value.(T)
@@ -165,12 +180,18 @@ function Tsyn(mac::MAController{M}, model::JuMP.Model, tol::Real = 0.01) where M
 end
 
 """
-    X(mac::MAController{P},
-    T::Symmetric{VariableRef,Array{VariableRef,2}}, 
-    i::Integer, k::Integer) where P<:Number
+    X(mac,T,i, k, tol) where P<:Number
 
 Synthesize a symmetric matrix X such that inequality (19) is satisfied iff
 X is positive semidefinite.
+...
+# Arguments:
+- `mac::MAController`   MinimaxAdaptiveControl controller object
+- `T::AbstractMatrix`   Either a matrix or a JuMP variable
+- `i::Integer`          Index variable,
+- `k::Integer`          Index Variable
+- `tol::Real = 0.01`    Forcing (19) to hold with margin, i.e. T - tol*I >= ...
+...
 """
 function X(mac::MAController{P},
     T::AbstractMatrix, 
@@ -196,6 +217,16 @@ end
 
 Synthesize a symmetric matrix Z such that inequality (20) is satisfied iff
 Z is positive semidefinite.
+
+...
+# Arguments:
+- `mac::MAController`   MinimaxAdaptiveControl controller object
+- `T::AbstractMatrix`   Either a matrix or a JuMP variable
+- `i::Integer`          Index variable
+- `j::Integer`          Index variable
+- `k::Integer`          Index Variable
+- `tol::Real = 0.01`    Forcing (20) to hold with margin, i.e. T - tol*I >= ...
+...
 """
 function Z(mac::MAController{P},
     T::AbstractMatrix, 
