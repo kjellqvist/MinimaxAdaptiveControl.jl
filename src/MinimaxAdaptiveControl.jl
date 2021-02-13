@@ -89,8 +89,8 @@ function MAController(
     
     candidates = Vector{Candidate{T}}(undef, N)
     for i = 1:N
-        A = As[i]
-        B = Bs[i]
+        A = copy(As[i])
+        B = copy(Bs[i])
         # Extend B to put on standard DARE form
         Bext = [B I(n)]
         P = dare(A, Bext, Matrix{Float64}(Q), Rext)
@@ -98,7 +98,7 @@ function MAController(
         K = Kext[1:m, 1:n]
         candidates[i] = Candidate(A, B, K,P, Base.RefValue{Float64}(0),T(lam))
     end
-    return MAController{T}(candidates,x0,γ,Matrix{T}(Q),Matrix{T}(R), Base.RefValue{Int64}(1))
+    return MAController{T}(candidates,copy(x0),γ,Matrix{T}(Q),Matrix{T}(R), Base.RefValue{Int64}(1))
 end
 
 # Controls
@@ -135,7 +135,7 @@ end
 """
     K(mac::MAController)
 
-Returns the feedback gain such that u = -Kx
+Select the feedback gain such that u = -Kx
 
 """
 function K(mac::MAController)
@@ -143,9 +143,37 @@ function K(mac::MAController)
 end
 
 """
+    Vbar(mac, T, x)
+
+Compute the current upper bound of the value function.
+
+...
+# Arguments
+- `mac::MAController`: Controller object
+- `T::AbstractMatrix`: T - matrix, can be synthesized using Tval(...)
+- `x::AbstractArray`: Next state
+...
+"""
+function Vbar(mac::MAController, T::AbstractMatrix, x::AbstractArray)
+    N = length(mac.candidates)
+    maxval = -Inf
+    minhist = Inf
+    secminhist = Inf
+    for i = 1:N
+        c = x'*mac.candidates[i].P*x -mac.γ^2*mac.candidates[i].hist[]
+        maxval < c ? maxval = c : nothing
+        hist = mac.candidates[i].hist[]
+        hist < secminhist ? secminhist = hist : nothing
+        hist <= minhist ? (minhist, secminhist) = (hist, minhist) : nothing
+    end
+    d = 
+    return max(maxval, x'*T*x - (mac.γ^2)/2*(minhist + secminhist))
+end
+
+"""
     T(mac, model, tol = 0.01) 
-    synthesize a common T using convex programming such that
-    inequalities (19) and (20) are fulfilled.
+synthesize a common T using convex programming such that
+inequalities (19) and (20) are fulfilled.
 ...
 # Arguments:
 - `mac::MAController` MinimaxAdaptiveControl controller object
@@ -211,9 +239,7 @@ function X(mac::MAController{P},
 end
 
 """
-    Z(mac::MAController{P},
-    T::Symmetric{VariableRef,Array{VariableRef,2}}, 
-    i::Integer, j::Integer, k::Integer) where P<:Number
+    Z(mac, T, i, j, k)
 
 Synthesize a symmetric matrix Z such that inequality (20) is satisfied iff
 Z is positive semidefinite.
@@ -255,5 +281,5 @@ function Z(mac::MAController{P},
     return Zijk
 end
 
-export Candidate, MAController, update!, K, Tsyn
+export Candidate, MAController, update!, K, Tsyn, Vbar
 end
