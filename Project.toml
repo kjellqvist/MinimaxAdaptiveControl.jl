@@ -1,19 +1,19 @@
 name = "MinimaxAdaptiveControl"
 uuid = "37d42955-b8b5-4e62-bbb2-568d4dbccabe"
 authors = ["Olle Kjellqvist <olle.kjellqvist@control.lth.se> and contributors"]
-version = "0.1.0"
+version = "0.3.0"
 
 [deps]
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [compat]
-JuMP = "0.21"
-julia = "1.5"
+julia = "1.7"
+JuMP = "1.0.0"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Hypatia = "b99e6be6-89ff-11e8-14f8-45c827f4f8f2"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test", "Hypatia"]
