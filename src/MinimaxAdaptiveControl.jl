@@ -13,13 +13,11 @@ include("mat_comp.jl")
 
 `B::AbstractMatrix{T}` Input Gain matrix
 
-`K::AbstractMatrix{T}` ``H_\\infty``` feedback gain
+`K::AbstractMatrix{T}` Feedback gain
 
 `P::AbstractMatrix{T}` Stationary solution to the Riccati equation
 
-`hist::Base.RefValue{<:Real}` History, ``\\sum _{k=0}^N \\lambda^{N-k}|x_{k+1} - Ax_k -Bu_k|^2``
-
-`lam::T` Forgetting factor ``\\lambda ``
+`hist::Base.RefValue{<:Real}` History, ``\\sum _{k=0}^N|x_{k+1} - Ax_k -Bu_k|^2``
 """
 struct Candidate{T<:Number}
     A::AbstractMatrix{T}
@@ -27,7 +25,6 @@ struct Candidate{T<:Number}
     K::AbstractMatrix{T}
     P::AbstractMatrix{T}
     hist::Base.RefValue{<:Real}
-    lam::T
 end
 
 """
@@ -44,7 +41,7 @@ end
 struct MAController{T<:Number}
     candidates::AbstractArray{Candidate{T},1}
     xprev::AbstractArray{T,1}
-    γ::Real
+    γ::T
     Q::AbstractMatrix{T}
     R::AbstractMatrix{T}
     argmin::Base.RefValue{Int64}
@@ -52,7 +49,7 @@ end
 
 # Constructors
 """
-    mac = MAController(As, Bs, Q, R, γ, x0, lam)
+    mac = MAController(As, Bs, Q, R, γ, x0)
 
 Create a MAController (minimax adaptive controller) `mac::MAController{T}`
 with matrices containing elements of type T, solving
@@ -65,17 +62,16 @@ with matrices containing elements of type T, solving
 - `R::AbstractMatrix,`                      Control penalty matrix |u|_R^2
 - `γ::Real,`                                Disturbance penalty, \\H_\\infty gain
 - `x0::AbstractVector{<:Number}`            Initial state
-- `lam::Real=1`                             Forgetting factor
 ...
 """
 function MAController(
     As::AbstractVector{<:AbstractMatrix{T}}, Bs::AbstractVector{<:AbstractMatrix{T}},
     Q::AbstractMatrix, R::AbstractMatrix, γ::Real, 
-    x0::AbstractVector{<:Number}, lam=1) where T<:Number
+    x0::AbstractVector{<:Number}) where T<:Number
     N = length(As)
 
     @assert length(As) == length(Bs) "As and Bs" must be of the same length
-    @assert length(As) > 0 "As and Bs cannot be nonempty"
+    @assert length(As) > 0 "As and Bs cannot be empty"
     @assert γ > 0 "γ must be strictly positive"
     @assert issemiposdef(Q) "Q must be positive semidefinite"
     @assert isposdef(R) "R nust be positive definite"
@@ -96,7 +92,7 @@ function MAController(
         P = dare(A, Bext, Matrix{Float64}(Q), Rext)
         Kext = (Rext + Bext'*P*Bext)\(Bext'*P*A)
         K = Kext[1:m, 1:n]
-        candidates[i] = Candidate(A, B, K,P, Base.RefValue{Float64}(0),T(lam))
+        candidates[i] = Candidate(A, B, K,P, Base.RefValue{Float64}(0))
     end
     return MAController{T}(candidates,copy(x0),γ,Matrix{T}(Q),Matrix{T}(R), Base.RefValue{Int64}(1))
 end
@@ -121,7 +117,7 @@ function update!(mac::MAController,
     argmin = 1
     k = 1
     for c in mac.candidates
-        c.hist[] += c.lam*(c.A*mac.xprev + c.B*u - x)'*(c.A*mac.xprev + c.B*u - x)
+        c.hist[] += (c.A*mac.xprev + c.B*u - x)'*(c.A*mac.xprev + c.B*u - x)
         if c.hist[] < lowestcost
             lowestcost = c.hist[]
             argmin = k
@@ -153,6 +149,17 @@ Compute the current upper bound of the value function.
 - `T::AbstractMatrix`: T - matrix, can be synthesized using Tval(...)
 - `x::AbstractArray`: Next state
 ...
+
+    Vbar(mac, Pijs, x)
+
+Compute the current upper bound of the value function.
+
+...
+# Arguments
+- `mac::MAController`: Controller object
+- `Pijs::AbstractArray{4,T}`: Pijs in (21), can be synthesized using Pval(...)
+- `x::AbstractArray`: Next state
+...
 """
 function Vbar(mac::MAController, T::AbstractMatrix, x::AbstractArray)
     N = length(mac.candidates)
@@ -170,8 +177,19 @@ function Vbar(mac::MAController, T::AbstractMatrix, x::AbstractArray)
     return max(maxval, x'*T*x - (mac.γ^2)/2*(minhist + secminhist))
 end
 
+function Vbar(mac::MAController, Pijs::AbstractArray{T, 4}, x::AbstractArray) where T<:Number
+    N = length(mac.candidates)
+    Vijs = zeros(T, N, N)
+    for i = 1:N
+        for j = 1:N
+            Vijs[i, j] = x' * Pijs[i, j, :, :] * x - mac.γ^2 * (mac.candidates[i].hist[] + mac.candidates[j].hist[]) / 2
+        end
+    end
+    return maximum(Vijs)
+end
+
 """
-    T(mac, model, tol = 0.01) 
+    Tsyn(mac, model, tol = 0.01) 
 synthesize a common T using convex programming such that
 inequalities (19) and (20) are fulfilled.
 ...
@@ -281,5 +299,51 @@ function Z(mac::MAController{P},
     return Zijk
 end
 
-export Candidate, MAController, update!, K, Tsyn, Vbar
+
+"""
+    Psyn(mac, model) 
+synthesize `P_{ij}` using convex programming such that
+inequalities (21) are fulfilled.
+...
+# Arguments:
+- `mac::MAController` MinimaxAdaptiveControl controller object
+- `model::JuMP.Model` A user supplied JuMP model. Currently the solvers Mosek and Hypatia works.
+...
+"""
+function Psyn(mac::MAController{M}, model::JuMP.Model) where M<:Number
+    N_systems = length(mac.candidates)
+    n = size(mac.Q)[1]
+    @variable(model, Pijs[1:N_systems, 1:N_systems, 1:n, 1:n])
+    for i = 1:N_systems
+        Ai = mac.candidates[i].A 
+        Bi = mac.candidates[i].B
+        for j = 1:N_systems
+            @constraint(model, Pijs[i, j, 1:n, 1:n] ∈ PSDCone())
+            @constraint(model, (mac.γ^2 * I(n) - Pijs[i, j, 1:n, 1:n]) ∈ PSDCone())
+            Aj = mac.candidates[j].A
+            Bj = mac.candidates[j].B
+            for k = 1:N_systems
+                Kk = mac.candidates[k].K
+                Aik = Ai - Bi*Kk # candidate i in feedback with Kk
+                Ajk = Aj - Bj*Kk # candidate j in feedback with Kk
+                A_avg = (Aik + Ajk) / 2
+                A_diff = (Aik - Ajk) / 2
+                M11 = Pijs[i, k, 1:n, 1:n] - mac.Q - Kk' * mac.R * Kk + A_avg' * A_avg * mac.γ^2 +
+                    A_diff' * A_diff * mac.γ^2
+                M12 = A_avg' * mac.γ^2
+                M21 = A_avg * mac.γ^2
+                M22 = I(n) * mac.γ^2 - Pijs[i, j, 1:n, 1:n]
+                ineq20 = Symmetric([M11 M12; M21 M22])
+                @constraint(model, ineq20 ∈ PSDCone())
+            end
+        end
+    end
+
+    optimize!(model)
+    Pijs = value.(Pijs)
+    stat = termination_status(model)
+    return Pijs, stat
+end
+
+export Candidate, MAController, update!, K, Tsyn, Psyn, Vbar
 end

@@ -15,7 +15,7 @@ using Test
     As = [A, A]
     Bs = [B1, B2]
 
-    mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ, [0.; 0; 0])
+    mac = MAController(As, Bs, Q, R, γ, [0.; 0; 0])
     PAnders = [
         20.628 -11.101 11.101
         -11.101 7.842 -6.842
@@ -45,7 +45,7 @@ end
 
     mac = MAController(As, Bs, Q, R, γ, [0.; 0; 0])
     model = Model(Hypatia.Optimizer)
-    unset_silent(model) # For now broken...
+    set_silent(model) # For now broken...
     Tval, stat = Tsyn(mac, model);
 
     P = mac.candidates[1].P
@@ -56,9 +56,9 @@ end
     ineq14 = Tval - (Q + K' * R * K + ((A + B * K)' / (inv(P) - γ^(-2) * I(3))) * (A + B * K))
     ineq15 = Tval - (Q + K' * (R - γ^2 * B' * B) * K + (A' / (inv(Tval) - γ^(-2) * I(3)) * A))
 
-    @test minimum(eigvals(ineq13)) > 0
-    @test minimum(eigvals(ineq14)) > 0
-    @test minimum(eigvals(ineq15)) > 0
+    @test minimum(eigvals(Symmetric(ineq13))) > -1e-12
+    @test minimum(eigvals(ineq14)) > -1e-12
+    @test minimum(eigvals(ineq15)) > -1e-12
     @test maximum(eigvals(Tval)) < γ^2
 end
 
@@ -75,6 +75,7 @@ end
     P2 = mac.candidates[2].P
 
     model = Model(Hypatia.Optimizer)
+    set_silent(model)
     @variable(model, T[1:1,1:1] in PSDCone())
 
     X12_ref = [(T - Q - K2' * R * K2) (A1 - B1 * K2)
@@ -93,7 +94,7 @@ end
     @test Z121_ref == MinimaxAdaptiveControl.Z(mac, T, 1, 2, 1, 0)
 end
 
-@testset "test valuefunction" begin
+@testset "test valuefunction - T" begin
     A = [3. -1;1 0]
     B1 = Matrix{Float64}(undef, 2, 1)
     B1[:,:] = [1. 0]
@@ -108,7 +109,7 @@ end
 
     mac = MAController(As, Bs, Q, R, gamma, [0.; 0])
     model = Model(Hypatia.Optimizer)
-    unset_silent(model)
+    set_silent(model)
     Tval, stat = Tsyn(mac, model, 0.01)
 
     @testset "V is monotonic" begin
@@ -118,7 +119,7 @@ end
         Vs = zeros(N)
         for k = 1:N
             update!(mac, x, u)
-            u = -K(mac)*x
+            u = -MinimaxAdaptiveControl.K(mac)*x
             x = A*x + B1*u
             Vs[k] = Vbar(mac,Tval, x)
         end
@@ -138,9 +139,119 @@ end
         Bs = [B1, B2]
     
         x0 = [0.; 0; 0]
-        mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ,x0 )
+        mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ,x0)
         model = Model(Hypatia.Optimizer)
-        unset_silent(model)
+        set_silent(model)
+        Tval, stat = Tsyn(mac, model, 1e-4)
+
+
+        x = [3;-5.;7]
+        u = [2.]
+        function Vval(mac, x,x0, u)
+            P = mac.candidates[1].P
+            c1 = x'*P*x - γ^2*(-x + A*x0 +B1*u)'*(-x + A*x0 +B1*u)
+            c2 = x'*P*x - γ^2*(-x + A*x0 -B1*u)'*(-x + A*x0 -B1*u)
+            c3 = x'*Tval*x - γ^2*((-x + A*x0)'*(-x + A*x0) + u'*B1'*B1*u)
+            return maximum([c1, c2, c3])
+        end
+
+        update!(mac, x,u)
+        @test Vval(mac,x,x0,u) == Vbar(mac,Tval, x)
+    end
+end
+
+@testset "test Psyn" begin
+    A = [2 -1 1.0; 1 0 0; 0 0 0]
+    B1 = Matrix{Float64}(undef, 3, 1)
+    B1[:] = [0; 0; 1.0]
+    B2 = -B1
+    Q = I(3)
+    γ = 34
+    R = I(1)
+    As = [A, A]
+    Bs = [B1, B2]
+
+    mac = MAController(As, Bs, Q, R, γ, [0.; 0; 0])
+    model = Model(Hypatia.Optimizer)
+    set_silent(model)
+    Pijs, stat = MinimaxAdaptiveControl.Psyn(mac, model);
+    Pijsposdef = true
+    Pijsleqgamma = true
+    ineq20holds = true
+    for i = 1:2
+        Ai = mac.candidates[i].A 
+        Bi = mac.candidates[i].B
+        for j = 1:2
+            Pijsposdef = Pijsposdef & (minimum(eigvals(Pijs[i, j, :, :])) > -1e-9)
+            Pijsleqgamma = Pijsleqgamma & (maximum(eigvals(Pijs[i, j, :, :])) < γ^2)
+            Aj = mac.candidates[j].A
+            Bj = mac.candidates[j].B
+            for k = 1:2
+                Kk = mac.candidates[k].K
+                Aik = Ai - Bi*Kk # candidate i in feedback with Kk
+                Ajk = Aj - Bj*Kk # candidate j in feedback with Kk
+                A_avg = (Aik + Ajk) / 2
+                A_diff = (Aik - Ajk) / 2
+                ineq20 = Pijs[i, k, :, :] - Q - Kk' * R * Kk - 
+                    (A_avg' / (inv(Pijs[i, j, :, :]) - γ^2 * I(3))) * A_avg +
+                    γ^2 * A_diff' * A_diff
+                ineq20holds = ineq20holds & (minimum(eigvals(ineq20)) > -1e-9)
+            end
+        end
+    end
+    @test Pijsposdef
+    @test Pijsleqgamma 
+    @test ineq20holds
+end
+
+@testset "test valuefunction - P" begin
+    A = [1. 1;1 0]
+    B1 = Matrix{Float64}(undef, 2, 1)
+    B1[:,:] = [1. 0]
+    B2 = Matrix{Float64}(undef, 2, 1)
+    B2[:,:] = -[1 0]
+
+    As = [A,A]
+    Bs = [B1,B2]
+    Q = I(2) * 1.
+    gamma = 30
+    R = I(1) * 1.
+
+    mac = MAController(As, Bs, Q, R, gamma, [0.; 0])
+    model = Model(Hypatia.Optimizer)
+    set_silent(model)
+    Pijs, stat = Psyn(mac, model)
+
+    @testset "V is monotonic" begin
+        N = 100
+        x = [3;-5.]
+        u = [0.]
+        Vs = zeros(N)
+        for k = 1:N
+            update!(mac, x, u)
+            u = -MinimaxAdaptiveControl.K(mac)*x
+            x = A*x + B1*u
+            Vs[k] = Vbar(mac,Pijs, x)
+        end
+        Vdiffs = Vs[2:N] - Vs[1:N-1]
+        @test maximum(Vdiffs) <= 0
+    end
+
+    @testset "Reduction to ±B" begin
+        A = [2 -1 1.0; 1 0 0; 0 0 0]
+        B1 = Matrix{Float64}(undef, 3, 1)
+        B1[:] = [0; 0; 1.0]
+        B2 = -B1
+        Q = I(3)
+        γ = 35
+        R = I(1)*1.
+        As = [A, A]
+        Bs = [B1, B2]
+    
+        x0 = [0.; 0; 0]
+        mac = MinimaxAdaptiveControl.MAController(As, Bs, Q, R, γ,x0)
+        model = Model(Hypatia.Optimizer)
+        set_silent(model)
         Tval, stat = Tsyn(mac, model, 1e-4)
 
 
