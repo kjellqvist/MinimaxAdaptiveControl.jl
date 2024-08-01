@@ -1,14 +1,7 @@
----
-noteId: "2828347064af11eb8191153eb319e31b"
-tags: []
-
----
-
+# Minimax Adaptive Control
+Companion code for the paper Output Feedback Minimax Adaptive Control
+![Image for minimax adaptive control](problem1.pdf)
 ```@meta
 CurrentModule = MinimaxAdaptiveControl
 ```
 
-```@autodocs
-Modules = [MinimaxAdaptiveControl]
-Order   = [:function, :type]
-```
