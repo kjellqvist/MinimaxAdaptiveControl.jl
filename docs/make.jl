@@ -20,4 +20,4 @@ makedocs(
                ],
          checkdocs=:exports
         )
-#deploydocs(repo = "github.com/kjellqvist/MinimaxAdaptiveControl.jl.git")
+deploydocs(repo = "github.com/kjellqvist/MinimaxAdaptiveControl.jl.git")
